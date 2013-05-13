@@ -3,6 +3,7 @@
 # Written by jkaberg, https://github.com/jkaberg
 import os
 import sys
+import time
 import shutil
 import logging
 import subprocess
@@ -56,8 +57,8 @@ def processFile(fileAction, inputFile, outputFile):
         try:
             logger.info(loggerHeader + "Linking file %s to %s", inputFile, outputFile)
             if os.name == 'nt':
-                if ctypes.windll.kernel32.CreateHardLinkW(unicode(outputFile), unicode(inputFile), 0) == 0:
-                    raise ctypes.WinError()
+                if not ctypes.windll.kernel32.CreateHardLinkA(outputFile, inputFile, 0):
+                    raise OSError
             else:
                 os.link(inputFile, outputFile)
         except:
@@ -109,6 +110,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                 if uTorrent:
                     logger.debug(loggerHeader + "Stoping torrent with hash: " + inputHash)
                     uTorrent.stop(inputHash)
+                    time.sleep(3)
             except:
                 raise
         else:
@@ -139,28 +141,38 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
         if inputLabel == config.get("Couchpotato", "label") and config.get("Couchpotato", "active"):
             try:
                 logger.info(loggerHeader + "Calling Couchpotato to process directory: %s", outputDestination)
-                if config.get("Couchpotato", "ssl"):
+                if config.get("Couchpotato", "ssl") == True:
                     sslBase = "https://"
                 else:
                     sslBase = "http://"
                 urllib2.urlopen(sslBase + config.get("Couchpotato", "host") + ":" + config.get("Couchpotato", "port") + "/" + config.get("Couchpotato", "web_root") + "api/" + config.get("Couchpotato", "apikey") + "/renamer.scan/?movie_folder=" + outputDestination)
+                time.sleep(3)
             except:
                 logger.error(loggerHeader + "Couchpotato post process for directory %s failed", outputDestination)
         elif inputLabel == config.get("Sickbeard", "label") and config.get("Sickbeard", "active"):
             try:
                 logger.info(loggerHeader + "Calling Sickbeard to process directory: %s", outputDestination)
                 autoProcessTV.processEpisode(outputDestination)
+                time.sleep(3)
             except:
                 logger.error(loggerHeader + "Sickbeard post process for directory %s failed", outputDestination)
+
+        if config.get("uProcess", "deleteLeftover") == True:
+            try:
+                shutil.rmtree(outputDestination)
+            except IOError:
+                raise
 
         # Resume seeding in uTorrent
         if uTorrent:
             if fileAction == "move":
                 logger.debug(loggerHeader + "Removing torrent with hash: " + inputHash)
                 uTorrent.removedata(inputHash)
+                time.sleep(3)
             elif fileAction == "link":
                 logger.debug(loggerHeader + "Starting torrent with hash: " + inputHash)
                 uTorrent.start(inputHash)
+                time.sleep(3)
 
         logger.info(loggerHeader + "Success, all done!")
 
