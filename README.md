@@ -1,12 +1,13 @@
 uProcess
 ========
 
-a tiny python post process for uTorrent
+a tiny python post processer for uTorrent
 
 Features:
 ---------
 - Extract downloaded content
 - Move/copy or (hard)link content (that dosnt need extraction)
+- Optionally calls Couchpotato and Sickbbeard when done
 
 Usage:
 ---------
