@@ -106,7 +106,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
         # Connect to uTorrent and stop the seeding if we need too
         if fileAction == "move" or fileAction == "link":
             try:
-                uTorrent = UTorrentClient(config.get("uTorrent", "host"), config.get("uTorrent", "user"), config.get("uTorrent", "password"))
+                uTorrent = UTorrentClient("http://" + config.get("uTorrent", "host") + ":" + config.get("uTorrent", "port") + "/gui/", config.get("uTorrent", "user"), config.get("uTorrent", "password"))
                 if uTorrent:
                     logger.debug(loggerHeader + "Stoping torrent with hash: " + inputHash)
                     uTorrent.stop(inputHash)
