@@ -3,6 +3,10 @@ uProcess
 
 a tiny python post process for uTorrent
 
+Features:
+---------
+- Extract downloaded content
+- Move/copy or (hard)link content (that dosnt need extraction)
 
 Usage:
 ---------
