@@ -46,6 +46,7 @@ def extractFile(compressedFile, outputDestination):
         subprocess.call(['7z', 'x', compressedFile, '-aos', '-o' + outputDestination], stdout=FNULL, stderr=subprocess.STDOUT)
     except:
         logger.error(loggerHeader + "Couldnt find 7zip in your system variables")
+        sys.exit(1)
     return
 
 def processFile(fileAction, inputFile, outputFile):
@@ -56,6 +57,7 @@ def processFile(fileAction, inputFile, outputFile):
     elif fileAction == "link":
         try:
             logger.info(loggerHeader + "Linking file %s to %s", inputFile, outputFile)
+            # Link workaround for Windows systems
             if os.name == 'nt':
                 if not ctypes.windll.kernel32.CreateHardLinkA(outputFile, inputFile, 0):
                     raise OSError
@@ -94,10 +96,12 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
 
         fileAction = config.get("uProcess", "fileAction")
         outputDestination = os.path.join(config.get("uProcess", "outputDirectory"), inputLabel, inputName)
+
+        # Extentions to use when searching directorys for files to process
         mediaExt = ('.mkv', '.avi', '.divx', '.xvid', '.mov', '.wmv', '.mp4', '.mpg', '.mpeg', '.vob', '.iso', '.nfo', '.sub', '.srt', '.jpg', '.jpeg', '.gif')
         archiveExt = ('.zip', '.rar', '.7z', '.gz', '.bz', '.tar', '.arj', '.1', '.01', '.001')
 
-        # Create output destination
+        # Create output directory
         try:
             createDestination(outputDestination)
         except IOError:
@@ -110,16 +114,17 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                 if uTorrent:
                     logger.debug(loggerHeader + "Stoping torrent with hash: " + inputHash)
                     uTorrent.stop(inputHash)
-                    time.sleep(3)
+                    time.sleep(2)
             except:
                 raise
         else:
             uTorrent = False
 
-        if inputFileName: # Single type torrent, no need for loop (we can assume this dosnt need extraction)
+        # If we received a "single" file torrent from uTorrent, then we dont need to search the directory for files as we can join directory + filename 
+        if inputFileName: 
             if inputFileName.lower().endswith(mediaExt) and 'sample' not in inputFileName.lower() and '/subs' not in inputFileName.lower():
                 processFile(fileAction, os.path.join(inputDirectory, inputFileName), outputDestination)
-        else: # Multi type torrent, here we need to loop the inputDirectory and copy/move/link or extract accordingly
+        else:
             for dirpath, dirnames, filenames in os.walk(inputDirectory):
                 for filename in filenames:
                     inputFile = os.path.join(dirpath, filename)
@@ -137,8 +142,8 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                         except IOError:
                             raise
 
-        # Couchpotato and Sickbeard processing
-        if inputLabel == config.get("Couchpotato", "label") and config.get("Couchpotato", "active"):
+        # Optionally process the outputDestination by calling Couchpotato/Sickbeard
+        if inputLabel == config.get("Couchpotato", "label") and config.get("Couchpotato", "active") == True:
             try:
                 logger.info(loggerHeader + "Calling Couchpotato to process directory: %s", outputDestination)
                 if config.get("Couchpotato", "ssl") == True:
@@ -146,19 +151,21 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                 else:
                     sslBase = "http://"
                 urllib2.urlopen(sslBase + config.get("Couchpotato", "host") + ":" + config.get("Couchpotato", "port") + "/" + config.get("Couchpotato", "web_root") + "api/" + config.get("Couchpotato", "apikey") + "/renamer.scan/?movie_folder=" + outputDestination)
-                time.sleep(3)
+                time.sleep(2)
             except:
                 logger.error(loggerHeader + "Couchpotato post process for directory %s failed", outputDestination)
-        elif inputLabel == config.get("Sickbeard", "label") and config.get("Sickbeard", "active"):
+        elif inputLabel == config.get("Sickbeard", "label") and config.get("Sickbeard", "active") == True:
             try:
                 logger.info(loggerHeader + "Calling Sickbeard to process directory: %s", outputDestination)
                 autoProcessTV.processEpisode(outputDestination)
-                time.sleep(3)
+                time.sleep(2)
             except:
                 logger.error(loggerHeader + "Sickbeard post process for directory %s failed", outputDestination)
 
+        # Delete leftover files
         if config.get("uProcess", "deleteLeftover") == True:
             try:
+                logger.debug(loggerHeader + "Deleting directory and content: %s", outputDestination)
                 shutil.rmtree(outputDestination)
             except IOError:
                 raise
@@ -168,11 +175,11 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
             if fileAction == "move":
                 logger.debug(loggerHeader + "Removing torrent with hash: " + inputHash)
                 uTorrent.removedata(inputHash)
-                time.sleep(3)
+                time.sleep(2)
             elif fileAction == "link":
                 logger.debug(loggerHeader + "Starting torrent with hash: " + inputHash)
                 uTorrent.start(inputHash)
-                time.sleep(3)
+                time.sleep(2)
 
         logger.info(loggerHeader + "Success, all done!\n")
 
