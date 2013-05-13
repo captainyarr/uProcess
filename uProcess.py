@@ -19,16 +19,16 @@ configFilename = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "co
 
 loggerHeader = "uProcess :: "
 logger = logging.getLogger('uProcess')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 loggerFormat = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%b-%d %H:%M:%S')
 
 loggerStd = logging.StreamHandler()
 loggerStd.setFormatter(loggerFormat)
-loggerStd.setLevel(logging.DEBUG)
+loggerStd.setLevel(logging.INFO)
 
 loggerHdlr = logging.FileHandler(logfile)
 loggerHdlr.setFormatter(loggerFormat)
-loggerHdlr.setLevel(logging.DEBUG)
+loggerHdlr.setLevel(logging.INFO)
 
 logger.addHandler(loggerStd)
 logger.addHandler(loggerHdlr)
@@ -174,7 +174,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                 uTorrent.start(inputHash)
                 time.sleep(3)
 
-        logger.info(loggerHeader + "Success, all done!")
+        logger.info(loggerHeader + "Success, all done!\n")
 
 if __name__ == "__main__":
 
