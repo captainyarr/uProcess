@@ -58,32 +58,44 @@ def extractFile(compressedFile, outputDestination):
         logger.info(loggerHeader + "Unpacking %s to %s", compressedFile, outputDestination)
         FNULL = open(os.devnull, 'w')
         subprocess.call(['7z', 'x', compressedFile, '-aos', '-o' + outputDestination], stdout=FNULL, stderr=subprocess.STDOUT)
-    except:
-        logger.error(loggerHeader + "Couldnt find 7zip in your system variables")
+    except Exception, e:
+        logger.error(loggerHeader + "Failed to find 7-zip in your system variables")
         sys.exit(1)
     return
 
 def processFile(fileAction, inputFile, outputFile):
-    if fileAction == "move":
-        logger.info(loggerHeader + "Moving file %s to %s", inputFile, outputFile)
-        shutil.move(inputFile, outputFile)
+    if not os.path.isfile(outputFile):
+        if fileAction == "move":
+            try:
+                logger.info(loggerHeader + "Moving file %s to %s", inputFile, outputFile)
+                shutil.move(inputFile, outputFile)
+            except Exception, e:
+                logger.error(loggerHeader + "Failed to move file %s to %s", inputFile, outputFile)
+                logging.exception(e)
 
-    elif fileAction == "link":
-        try:
-            logger.info(loggerHeader + "Linking file %s to %s", inputFile, outputFile)
-            # Link workaround for Windows systems
-            if os.name == 'nt':
-                if not ctypes.windll.kernel32.CreateHardLinkA(outputFile, inputFile, 0):
-                    raise OSError
-            else:
-                os.link(inputFile, outputFile)
-        except:
-            logger.error(loggerHeader + "Couldnt link file, copying %s to %s", inputFile, outputFile)
-            shutil.copy(inputFile, outputFile)
+        elif fileAction == "link":
+            try:
+                logger.info(loggerHeader + "Linking file %s to %s", inputFile, outputFile)
+                # Link workaround for Windows systems
+                if os.name == 'nt':
+                    ctypes.windll.kernel32.CreateHardLinkA(outputFile, inputFile, 0)
+                else:
+                    os.link(inputFile, outputFile)
+            except Exception, e:
+                logger.error(loggerHeader + "Failed to link file %s to %s", inputFile, outputFile)
+                logging.exception(e)
+                logger.info(loggerHeader + "Copying file %s to %s", inputFile, outputFile)
+                shutil.copy(inputFile, outputFile)
 
+        else:
+            try:
+                logger.info(loggerHeader + "Copying file %s to %s", inputFile, outputFile)
+                shutil.copy(inputFile, outputFile)
+            except Exception, e:
+                logger.error(loggerHeader + "Failed to copy file %s to %s", inputFile, outputFile)
+                logging.exception(e)
     else:
-        logger.info(loggerHeader + "Copying file %s to %s", inputFile, outputFile)
-        shutil.copy(inputFile, outputFile)
+        logger.error(loggerHeader + "File already exists at destination: %s", outputFile)
 
     return
 
@@ -114,47 +126,65 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
         # Extentions to use when searching directorys for files to process
         mediaExt = ('.mkv', '.avi', '.divx', '.xvid', '.mov', '.wmv', '.mp4', '.mpg', '.mpeg', '.vob', '.iso', '.nfo', '.sub', '.srt', '.jpg', '.jpeg', '.gif')
         archiveExt = ('.zip', '.rar', '.7z', '.gz', '.bz', '.tar', '.arj', '.1', '.01', '.001')
+        ignoreWords = ['sample', 'subs', 'proof']
 
         # Create output directory
         try:
             createDestination(outputDestination)
-        except IOError:
-            raise
+        except Exception, e:
+            logger.error(loggerHeader + "Failed to create destination directory: %s", outputDestination)
+            logging.exception(e)
 
         # Connect to uTorrent and stop the seeding if we need too
         if fileAction == "move" or fileAction == "link":
+            uTorrentHost = "http://" + config.get("uTorrent", "host") + ":" + config.get("uTorrent", "port") + "/gui/"
             try:
-                uTorrent = UTorrentClient("http://" + config.get("uTorrent", "host") + ":" + config.get("uTorrent", "port") + "/gui/", config.get("uTorrent", "user"), config.get("uTorrent", "password"))
+                uTorrent = UTorrentClient(uTorrentHost, config.get("uTorrent", "user"), config.get("uTorrent", "password"))
                 if uTorrent:
                     logger.debug(loggerHeader + "Stoping torrent with hash: " + inputHash)
                     uTorrent.stop(inputHash)
                     time.sleep(2)
-            except:
-                raise
+            except Exception, e:
+                logger.error(loggerHeader + "Failed to connect with uTorrent: %s", uTorrentHost)
+                logging.exception(e)
         else:
             uTorrent = False
 
         # If we received a "single" file torrent from uTorrent, then we dont need to search the directory for files as we can join directory + filename 
         if inputFileName: 
-            if inputFileName.lower().endswith(mediaExt) and 'sample' not in inputFileName.lower() and '/subs' not in inputFileName.lower():
-                processFile(fileAction, os.path.join(inputDirectory, inputFileName), outputDestination)
+            if inputFileName.lower().endswith(mediaExt) and not any(word in inputFileName.lower() for word in ignoreWords):
+                if os.path.isfile(inputDirectory):
+                    try:
+                        processFile(fileAction, inputDirectory, outputDestination)
+                    except Exception, e:
+                        logging.error(loggerHeader + "There was an error when trying to process file: %s", os.path.join(inputDirectory, inputFileName))
+                        logging.exception(e)
+                else:
+                    try:
+                        processFile(fileAction, os.path.join(inputDirectory, inputFileName), outputDestination)
+                    except Exception, e:
+                        logging.error(loggerHeader + "There was an error when trying to process file: %s", os.path.join(inputDirectory, inputFileName))
+                        logging.exception(e)
         else:
             for dirpath, dirnames, filenames in os.walk(inputDirectory):
                 for filename in filenames:
                     inputFile = os.path.join(dirpath, filename)
-                    if filename.lower().endswith(mediaExt) and 'sample' not in filename.lower() and '/subs' not in filename.lower():
+                    if filename.lower().endswith(mediaExt) and not any(word in filename.lower() for word in ignoreWords):
                         logger.debug(loggerHeader + "Found media file: %s", filename)
                         outputFile = os.path.join(outputDestination, filename)
                         try:
                             processFile(fileAction, inputFile, outputFile)
-                        except IOError:
-                            raise
-                    elif filename.lower().endswith(archiveExt) and 'sample' not in filename.lower() and '/subs' not in filename.lower():
+                        except Exception, e:
+                            logging.error(loggerHeader + "There was an error when trying to process file: %s", inputFile)
+                            logging.exception(e)
+
+                    elif filename.lower().endswith(archiveExt) and not any(word in filename.lower() for word in ignoreWords):
                         logger.debug(loggerHeader + "Found compressed file: %s", filename)
                         try:
                             extractFile(inputFile, outputDestination)
-                        except IOError:
-                            raise
+                        except Exception, e:
+                            logging.error(loggerHeader + "There was an error when trying to extract file: %s", inputFile)
+                            logging.exception(e)
 
         # Optionally process the outputDestination by calling Couchpotato/Sickbeard
         if inputLabel == config.get("Couchpotato", "label") and config.get("Couchpotato", "active") == True:
@@ -166,23 +196,27 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                     sslBase = "http://"
                 urllib2.urlopen(sslBase + config.get("Couchpotato", "host") + ":" + config.get("Couchpotato", "port") + "/" + config.get("Couchpotato", "web_root") + "api/" + config.get("Couchpotato", "apikey") + "/renamer.scan/?movie_folder=" + outputDestination)
                 time.sleep(2)
-            except:
-                logger.error(loggerHeader + "Couchpotato post process for directory %s failed", outputDestination)
+            except Exception, e:
+                logger.error(loggerHeader + "Couchpotato post process failed for directory: %s ", outputDestination)
+                logging.exception(e)
+
         elif inputLabel == config.get("Sickbeard", "label") and config.get("Sickbeard", "active") == True:
             try:
                 logger.info(loggerHeader + "Calling Sickbeard to process directory: %s", outputDestination)
                 autoProcessTV.processEpisode(outputDestination)
                 time.sleep(2)
-            except:
-                logger.error(loggerHeader + "Sickbeard post process for directory %s failed", outputDestination)
+            except Exception, e:
+                logger.error(loggerHeader + "Sickbeard post process failed for directory: %s ", outputDestination)
+                logging.exception(e)
 
         # Delete leftover files
         if config.get("uProcess", "deleteLeftover") == True:
             try:
                 logger.debug(loggerHeader + "Deleting directory and content: %s", outputDestination)
                 shutil.rmtree(outputDestination)
-            except IOError:
-                raise
+            except Exception, e:
+                logger.error(loggerHeader + "Failed to delete directory: %s", outputDestination)
+                logging.exception(e)
 
         # Resume seeding in uTorrent
         if uTorrent:
@@ -214,4 +248,8 @@ if __name__ == "__main__":
     else:
         inputLabel = None
 
-    main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel)
+    try:
+        main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel)
+    except Exception, e:
+        logger.error(loggerHeader + "One or more variables are missing")
+        logging.exception(e)
