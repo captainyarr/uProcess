@@ -126,6 +126,8 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
         # Extentions to use when searching directorys for files to process
         mediaExt = ('.mkv', '.avi', '.divx', '.xvid', '.mov', '.wmv', '.mp4', '.mpg', '.mpeg', '.vob', '.iso', '.nfo', '.sub', '.srt', '.jpg', '.jpeg', '.gif')
         archiveExt = ('.zip', '.rar', '.7z', '.gz', '.bz', '.tar', '.arj', '.1', '.01', '.001')
+
+        # An list of words that we dont want filenames/directorys to contain
         ignoreWords = ['sample', 'subs', 'proof']
 
         # Create output directory
@@ -152,7 +154,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
 
         # If we received a "single" file torrent from uTorrent, then we dont need to search the directory for files as we can join directory + filename 
         if inputFileName: 
-            if inputFileName.lower().endswith(mediaExt) and not any(word in inputFileName.lower() for word in ignoreWords):
+            if inputFileName.lower().endswith(mediaExt) and not any(word in inputFileName.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
                 if os.path.isfile(inputDirectory):
                     try:
                         processFile(fileAction, inputDirectory, outputDestination)
@@ -169,7 +171,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
             for dirpath, dirnames, filenames in os.walk(inputDirectory):
                 for filename in filenames:
                     inputFile = os.path.join(dirpath, filename)
-                    if filename.lower().endswith(mediaExt) and not any(word in filename.lower() for word in ignoreWords):
+                    if filename.lower().endswith(mediaExt) and not any(word in filename.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
                         logger.debug(loggerHeader + "Found media file: %s", filename)
                         outputFile = os.path.join(outputDestination, filename)
                         try:
@@ -178,7 +180,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                             logging.error(loggerHeader + "There was an error when trying to process file: %s", inputFile)
                             logging.exception(e)
 
-                    elif filename.lower().endswith(archiveExt) and not any(word in filename.lower() for word in ignoreWords):
+                    elif filename.lower().endswith(archiveExt) and not any(word in filename.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
                         logger.debug(loggerHeader + "Found compressed file: %s", filename)
                         try:
                             extractFile(inputFile, outputDestination)
