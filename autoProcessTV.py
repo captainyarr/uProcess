@@ -63,7 +63,7 @@ def processEpisode(dirName, nzbName=None):
     port = config.get("Sickbeard", "port")
     username = config.get("Sickbeard", "username")
     password = config.get("Sickbeard", "password")
-    ssl = config.get("Sickbeard", "ssl")
+    ssl = config.getboolean("Sickbeard", "ssl")
 
     try:
         web_root = config.get("Sickbeard", "web_root")
@@ -78,7 +78,7 @@ def processEpisode(dirName, nzbName=None):
 
     myOpener = AuthURLOpener(username, password)
 
-    if ssl == True:
+    if ssl:
         protocol = "https://"
     else:
         protocol = "http://"
