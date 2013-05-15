@@ -13,20 +13,30 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #    
-#    Author: jkaberg, https://github.com/jkaberg
+#    Creator of uProcess: jkaberg, https://github.com/jkaberg
 
-import os
-import sys
-import time
-import shutil
-import logging
-import subprocess
-import ctypes
-import urllib2
-import ConfigParser
+import os, sys, time, shutil, logging, subprocess, ctypes, urllib, urllib2, ConfigParser
 
 from utorrent.client import UTorrentClient
 import autoProcessTV
+
+class AuthURLOpener(urllib.FancyURLopener):
+    def __init__(self, user, pw):
+        self.username = user
+        self.password = pw
+        self.numTries = 0
+        urllib.FancyURLopener.__init__(self)
+
+    def prompt_user_passwd(self, host, realm):
+        if self.numTries == 0:
+            self.numTries = 1
+            return (self.username, self.password)
+        else:
+            return ('', '')
+
+    def openit(self, url):
+        self.numTries = 0
+        return urllib.FancyURLopener.open(self, url)
 
 def createDestination(outputDestination):
     if os.path.exists(outputDestination):
@@ -82,6 +92,75 @@ def processFile(fileAction, inputFile, outputFile):
     else:
         logger.error(loggerHeader + "File already exists at destination: %s", outputFile)
     return
+
+def processMovie(inputDirectory):
+
+    host = config.get("Couchpotato", "host")
+    port = config.get("Couchpotato", "port")
+    apikey = config.get("Couchpotato", "apikey")
+    ssl = config.getboolean("Couchpotato", "ssl")
+
+    try:
+        baseURL = config.get("Couchpotato", "baseURL")
+        logger.debug(loggerHeader + "processMovie :: URL base: %s", baseURL)
+    except ConfigParser.NoOptionError:
+        baseURL = None
+
+    if ssl:
+        protocol = "https://"
+    else:
+        protocol = "http://"
+
+    url = protocol + host + ":" + port + "/" + baseURL + "api/" + apikey + "/renamer.scan/?movie_folder=" + inputDirectory
+
+    try:
+        urlObj = urllib2.urlopen(url)
+        logger.debug(loggerHeader + "processMovie :: Opening URL: %s", url)
+    except IOError, e:
+        logger.error(loggerHeader + "processMovie :: Unable to open URL: ", str(e))
+        sys.exit(1)
+
+    result = urlObj.readlines()
+    for line in result:
+        logger.info(loggerHeader + "processMovie :: " + line)
+
+def processEpisode(inputDirectory, torrentName=None):
+
+    host = config.get("Sickbeard", "host")
+    port = config.get("Sickbeard", "port")
+    username = config.get("Sickbeard", "username")
+    password = config.get("Sickbeard", "password")
+    ssl = config.getboolean("Sickbeard", "ssl")
+
+    try:
+        baseURL = config.get("Sickbeard", "baseURL")
+        logger.debug(loggerHeader + "processEpisode :: URL base: %s", baseURL)
+    except ConfigParser.NoOptionError:
+        baseURL = None
+
+    params = {}
+    params['quiet'] = 1
+    params['dir'] = inputDirectory
+    if torrentName != None:
+        params['torrentName'] = torrentName
+
+    if ssl:
+        protocol = "https://"
+    else:
+        protocol = "http://"
+    url = protocol + host + ":" + port + "/" + baseURL + "home/postprocess/processEpisode?" + urllib.urlencode(params)
+
+    myOpener = AuthURLOpener(username, password)
+    try:
+        urlObj = myOpener.openit(url)
+        logger.debug(loggerHeader + "processEpisode :: Opening URL: %s", url)
+    except IOError, e:
+        logger.error(loggerHeader + "processEpisode :: Unable to open URL: ", str(e))
+        sys.exit(1)
+
+    result = urlObj.readlines()
+    for line in result:
+        logger.debug(loggerHeader + "processEpisode :: " + line)
 
 def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel):
 
@@ -150,11 +229,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
     if inputLabel == config.get("Couchpotato", "label") and config.getboolean("Couchpotato", "active"):
         try:
             logger.info(loggerHeader + "Calling Couchpotato to process directory: %s", outputDestination)
-            if config.getboolean("Couchpotato", "ssl"):
-                sslBase = "https://"
-            else:
-                sslBase = "http://"
-            urllib2.urlopen(sslBase + config.get("Couchpotato", "host") + ":" + config.get("Couchpotato", "port") + "/" + config.get("Couchpotato", "web_root") + "api/" + config.get("Couchpotato", "apikey") + "/renamer.scan/?movie_folder=" + outputDestination)
+            processMovie(outputDestination)
         except Exception, e:
             logger.error(loggerHeader + "Couchpotato post process failed for directory: %s", outputDestination)
             logging.exception(e)
@@ -163,7 +238,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
     elif inputLabel == config.get("Sickbeard", "label") and config.getboolean("Sickbeard", "active"):
         try:
             logger.info(loggerHeader + "Calling Sickbeard to process directory: %s", outputDestination)
-            autoProcessTV.processEpisode(outputDestination)
+            processEpisode(outputDestination, inputName)
         except Exception, e:
             logger.error(loggerHeader + "Sickbeard post process failed for directory: %s", outputDestination)
             logging.exception(e)
@@ -201,8 +276,8 @@ if __name__ == "__main__":
     else:
         logger.setLevel(logging.INFO)
 
-    configFilename = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "config.cfg"))
     config = ConfigParser.ConfigParser()
+    configFilename = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "config.cfg"))
     config.read(configFilename)
 
     if not os.path.isfile(configFilename):
