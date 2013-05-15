@@ -47,7 +47,7 @@ def createDestination(outputDestination):
             os.makedirs(outputDestination)
         except Exception, e:
             logger.error(loggerHeader + "Failed to create destination directory: %s", outputDestination)
-            logging.exception(e)
+            logger.exception(e)
     return
 
 def extractFile(compressedFile, outputDestination):
@@ -57,7 +57,7 @@ def extractFile(compressedFile, outputDestination):
         subprocess.call(['7z', 'x', compressedFile, '-aos', '-o' + outputDestination], stdout=FNULL, stderr=subprocess.STDOUT)
     except Exception, e:
         logger.error(loggerHeader + "Unable to execute 7-zip, is the 7-zip directory in your system variables?")
-        logging.exception(e)
+        logger.exception(e)
         sys.exit(1)
     return
 
@@ -69,7 +69,7 @@ def processFile(fileAction, inputFile, outputFile):
                 shutil.move(inputFile, outputFile)
             except Exception, e:
                 logger.error(loggerHeader + "Failed to move file %s to %s", inputFile, outputFile)
-                logging.exception(e)
+                logger.exception(e)
         elif fileAction == "link":
             try:
                 logger.info(loggerHeader + "Linking file %s to %s", inputFile, outputFile)
@@ -80,7 +80,7 @@ def processFile(fileAction, inputFile, outputFile):
                     os.link(inputFile, outputFile)
             except Exception, e:
                 logger.info(loggerHeader + "Linking failed, copying file %s to %s", inputFile, outputFile)
-                logging.exception(e)
+                logger.exception(e)
                 shutil.copy(inputFile, outputFile)
         else:
             try:
@@ -88,7 +88,7 @@ def processFile(fileAction, inputFile, outputFile):
                 shutil.copy(inputFile, outputFile)
             except Exception, e:
                 logger.error(loggerHeader + "Failed to copy file %s to %s", inputFile, outputFile)
-                logging.exception(e)
+                logger.exception(e)
     else:
         logger.error(loggerHeader + "File already exists at destination: %s", outputFile)
     return
@@ -189,7 +189,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
         createDestination(outputDestination)
     except Exception, e:
         logger.error(loggerHeader + "Failed to create destination directory: %s", outputDestination)
-        logging.exception(e)
+        logger.exception(e)
 
     # Connect to uTorrent and stop the seeding if we need too
     if fileAction == "move" or fileAction == "link":
@@ -201,7 +201,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
                 uTorrent.stop(inputHash)
         except Exception, e:
             logger.error(loggerHeader + "Failed to connect with uTorrent: %s", uTorrentHost)
-            logging.exception(e)
+            logger.exception(e)
         time.sleep(2)
     else:
         uTorrent = False
@@ -232,7 +232,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
             processMovie(outputDestination)
         except Exception, e:
             logger.error(loggerHeader + "Couchpotato post process failed for directory: %s", outputDestination)
-            logging.exception(e)
+            logger.exception(e)
         time.sleep(2)
 
     elif inputLabel == config.get("Sickbeard", "label") and config.getboolean("Sickbeard", "active"):
@@ -241,7 +241,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
             processEpisode(outputDestination, inputName)
         except Exception, e:
             logger.error(loggerHeader + "Sickbeard post process failed for directory: %s", outputDestination)
-            logging.exception(e)
+            logger.exception(e)
         time.sleep(2)
 
     # Delete leftover files
@@ -251,7 +251,7 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
             shutil.rmtree(outputDestination)
         except Exception, e:
             logger.error(loggerHeader + "Failed to delete directory: %s", outputDestination)
-            logging.exception(e)
+            logger.exception(e)
 
     # Resume seeding in uTorrent
     if uTorrent:
@@ -305,4 +305,4 @@ if __name__ == "__main__":
         main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel)
     except Exception, e:
         logger.error(loggerHeader + "One or more variables are missing")
-        logging.exception(e)
+        logger.exception(e)
