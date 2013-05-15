@@ -193,42 +193,23 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
 if __name__ == "__main__":
 
     logfile = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "uProcess.log"))
-    configFilename = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "config.cfg"))
-
-    config = ConfigParser.ConfigParser()
-    config.read(configFilename)
-
     loggerHeader = "uProcess :: "
+    loggerFormat = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%b-%d %H:%M:%S')
     logger = logging.getLogger('uProcess')
     if config.getboolean("uProcess", "debug"):
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
 
-    loggerFormat = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%b-%d %H:%M:%S')
-    loggerStd = logging.StreamHandler()
-    loggerStd.setFormatter(loggerFormat)
-    if config.getboolean("uProcess", "debug"):
-        loggerStd.setLevel(logging.DEBUG)
-    else:
-        loggerStd.setLevel(logging.INFO)
-
-    loggerHdlr = logging.FileHandler(logfile)
-    loggerHdlr.setFormatter(loggerFormat)
-    if config.getboolean("uProcess", "debug"):
-        loggerHdlr.setLevel(logging.DEBUG)
-    else:
-        loggerHdlr.setLevel(logging.INFO)
-
-    logger.addHandler(loggerStd)
-    logger.addHandler(loggerHdlr)
+    configFilename = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "config.cfg"))
+    config = ConfigParser.ConfigParser()
+    config.read(configFilename)
 
     if not os.path.isfile(configFilename):
         logger.error(loggerHeader + "Config file not found: " + configFilename)
         sys.exit(1)
     else:
         logger.info(loggerHeader + "Config loaded: " + configFilename)
-
 
     # usage: uProcess.py "%D" "%N" "%I" "%K" "%F" "%L"
     # uTorrent 3.0+ only
@@ -239,11 +220,11 @@ if __name__ == "__main__":
     if inputKind == "single":
         inputFileName = sys.argv[5]                 # %F
     else:
-        inputFileName = None
+        inputFileName = False
     if sys.argv[6]:
         inputLabel = sys.argv[6]                    # %L - The label of the torrent
     else:
-        inputLabel = None
+        inputLabel = False
 
     try:
         main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel)
