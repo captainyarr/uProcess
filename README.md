@@ -11,7 +11,7 @@ Features:
 
 Requirements:
 ---------
-- uTorrent 1.8+. Might work for older verisons, aslong as uTorrent can pass "%D" "%N" "%I" "%L" to uProcess it should work
+- uTorrent 2.2.1 Build 25302 (confirmed), might work on earlier versions
 - 7-zip
 - Python 2.7+
 
