@@ -11,7 +11,7 @@ Features:
 
 Requirements:
 ---------
-- uTorrent 2.2.1 Build 25302 (confirmed), might work on earlier versions
+- uTorrent 2.2.1 Build 25302+ (confirmed), might work on earlier versions
 - 7-zip
 - Python 2.7+
 
