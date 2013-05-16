@@ -188,7 +188,10 @@ def main(inputDirectory, inputName, inputHash, inputLabel):
         for file in files:
             fileName, fileSize, downloadedSize = file[:3]
             if fileSize == downloadedSize:
-                inputFile = os.path.join(inputDirectory, fileName)
+                if os.path.isfile(inputDirectory):
+                    inputFile = inputDirectory
+                else:
+                    inputFile = os.path.join(inputDirectory, fileName)
                 outputFile = os.path.join(outputDestination, fileName)
                 if fileName.lower().endswith(mediaExt) and not any(word in fileName.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
                     logger.debug(loggerHeader + "Found media file: %s", fileName)
