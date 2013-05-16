@@ -15,10 +15,9 @@
 #    
 #    Creator of uProcess: jkaberg, https://github.com/jkaberg
 
-import os, sys, time, shutil, logging, subprocess, ctypes, urllib, urllib2, ConfigParser
+import os, sys, shutil, logging, subprocess, urllib, ConfigParser
 
 from utorrent.client import UTorrentClient
-import autoProcessTV
 
 class AuthURLOpener(urllib.FancyURLopener):
     def __init__(self, user, pw):
@@ -37,6 +36,10 @@ class AuthURLOpener(urllib.FancyURLopener):
     def openit(self, url):
         self.numTries = 0
         return urllib.FancyURLopener.open(self, url)
+
+def createLink(src, dst):
+    import ctypes
+    if not ctypes.windll.kernel32.CreateHardLinkW(dst, src, 0): raise OSError
 
 def createDestination(outputDestination):
     if os.path.exists(outputDestination):
@@ -58,7 +61,7 @@ def extractFile(compressedFile, outputDestination):
     except Exception, e:
         logger.error(loggerHeader + "Unable to execute 7-zip, is the 7-zip directory in your system variables?")
         logger.exception(e)
-        sys.exit(1)
+        raise
     return
 
 def processFile(fileAction, inputFile, outputFile):
@@ -71,17 +74,14 @@ def processFile(fileAction, inputFile, outputFile):
                 logger.error(loggerHeader + "Failed to move file %s to %s", inputFile, outputFile)
                 logger.exception(e)
         elif fileAction == "link":
+            if os.name == 'nt':
+                os.link = createLink
             try:
                 logger.info(loggerHeader + "Linking file %s to %s", inputFile, outputFile)
-                # Link workaround for Windows systems
-                if os.name == 'nt':
-                    ctypes.windll.kernel32.CreateHardLinkA(outputFile, inputFile, 0)
-                else:
-                    os.link(inputFile, outputFile)
+                os.link(inputFile, outputFile)
             except Exception, e:
-                logger.info(loggerHeader + "Linking failed, copying file %s to %s", inputFile, outputFile)
+                logger.info(loggerHeader + "Failed to link file %s to %s", inputFile, outputFile)
                 logger.exception(e)
-                shutil.copy(inputFile, outputFile)
         else:
             try:
                 logger.info(loggerHeader + "Copying file %s to %s", inputFile, outputFile)
@@ -94,138 +94,117 @@ def processFile(fileAction, inputFile, outputFile):
     return
 
 def processMovie(inputDirectory):
-
-    host = config.get("Couchpotato", "host")
-    port = config.get("Couchpotato", "port")
-    apikey = config.get("Couchpotato", "apikey")
-    ssl = config.getboolean("Couchpotato", "ssl")
-
     try:
         baseURL = config.get("Couchpotato", "baseURL")
         logger.debug(loggerHeader + "processMovie :: URL base: %s", baseURL)
     except ConfigParser.NoOptionError:
-        baseURL = None
+        baseURL = ''
 
-    if ssl:
+    if config.getboolean("Couchpotato", "ssl"):
         protocol = "https://"
     else:
         protocol = "http://"
-
-    url = protocol + host + ":" + port + "/" + baseURL + "api/" + apikey + "/renamer.scan/?movie_folder=" + inputDirectory
+    url = protocol + config.get("Couchpotato", "host") + ":" + config.get("Couchpotato", "port") + "/" + baseURL + "api/" + config.get("Couchpotato", "apikey") + "/renamer.scan/?movie_folder=" + inputDirectory
+    myOpener = AuthURLOpener(config.get("Couchpotato", "username"), config.get("Couchpotato", "password"))
 
     try:
-        urlObj = urllib2.urlopen(url)
+        urlObj = myOpener.openit(url)
         logger.debug(loggerHeader + "processMovie :: Opening URL: %s", url)
     except IOError, e:
-        logger.error(loggerHeader + "processMovie :: Unable to open URL: ", str(e))
-        sys.exit(1)
+        logger.error(loggerHeader + "processMovie :: Unable to open URL: ", url)
+        logger.exception(e)
+        raise
 
     result = urlObj.readlines()
     for line in result:
         logger.info(loggerHeader + "processMovie :: " + line)
 
-def processEpisode(inputDirectory, torrentName=None):
-
-    host = config.get("Sickbeard", "host")
-    port = config.get("Sickbeard", "port")
-    username = config.get("Sickbeard", "username")
-    password = config.get("Sickbeard", "password")
-    ssl = config.getboolean("Sickbeard", "ssl")
-
+def processEpisode(inputDirectory):
     try:
         baseURL = config.get("Sickbeard", "baseURL")
         logger.debug(loggerHeader + "processEpisode :: URL base: %s", baseURL)
     except ConfigParser.NoOptionError:
-        baseURL = None
+        baseURL = ''
 
-    params = {}
-    params['quiet'] = 1
-    params['dir'] = inputDirectory
-    if torrentName != None:
-        params['torrentName'] = torrentName
-
-    if ssl:
+    if config.getboolean("Sickbeard", "ssl"):
         protocol = "https://"
     else:
         protocol = "http://"
-    url = protocol + host + ":" + port + "/" + baseURL + "home/postprocess/processEpisode?" + urllib.urlencode(params)
+    url = protocol + config.get("Sickbeard", "host") + ":" + config.get("Sickbeard", "port") + "/" + baseURL + "home/postprocess/processEpisode?quiet=1&dir=" + inputDirectory
+    myOpener = AuthURLOpener(config.get("Sickbeard", "username"), config.get("Sickbeard", "password"))
 
-    myOpener = AuthURLOpener(username, password)
     try:
         urlObj = myOpener.openit(url)
         logger.debug(loggerHeader + "processEpisode :: Opening URL: %s", url)
-    except IOError, e:
-        logger.error(loggerHeader + "processEpisode :: Unable to open URL: ", str(e))
-        sys.exit(1)
+    except Exception, e:
+        logger.error(loggerHeader + "processEpisode :: Unable to open URL: ", url)
+        logger.exception(e)
+        raise
 
     result = urlObj.readlines()
     for line in result:
         logger.debug(loggerHeader + "processEpisode :: " + line)
 
-def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel):
-
-    fileAction = config.get("uProcess", "fileAction")
-    outputDestination = os.path.join(config.get("uProcess", "outputDirectory"), inputLabel, inputName)
-
+def main(inputDirectory, inputName, inputHash, inputLabel):
     logger.debug(loggerHeader + "Torrent Dir: %s", inputDirectory)
     logger.debug(loggerHeader + "Torrent Name: %s", inputName)
     logger.debug(loggerHeader + "Torrent Hash: %s", inputHash)
-    logger.debug(loggerHeader + "Torrent Kind: %s", inputKind)
-
-    if inputKind == "single":
-        logger.debug(loggerHeader + "Torrent Filename: %s", inputFileName)
     if inputLabel:
         logger.debug(loggerHeader + "Torrent Label: %s", inputLabel)
+    else:
+        inputLabel = ''
 
     # Extentions to use when searching directorys for files to process
     mediaExt = ('.mkv', '.avi', '.divx', '.xvid', '.mov', '.wmv', '.mp4', '.mpg', '.mpeg', '.vob', '.iso', '.nfo', '.sub', '.srt', '.jpg', '.jpeg', '.gif')
     archiveExt = ('.zip', '.rar', '.7z', '.gz', '.bz', '.tar', '.arj', '.1', '.01', '.001')
-
     # An list of words that we dont want filenames/directorys to contain
     ignoreWords = ['sample', 'subs', 'proof']
+    # Move, copy or link
+    fileAction = config.get("uProcess", "fileAction")
+    # Destination for extracted, copied, moved or linked files
+    outputDestination = os.path.join(config.get("uProcess", "outputDirectory"), inputLabel, inputName)
+    # Define the uTorrent host
+    uTorrentHost = "http://" + config.get("uTorrent", "host") + ":" + config.get("uTorrent", "port") + "/gui/"
 
-    # Create output directory
-    try:
+    try: # Create output destination
         createDestination(outputDestination)
     except Exception, e:
         logger.error(loggerHeader + "Failed to create destination directory: %s", outputDestination)
         logger.exception(e)
 
-    # Connect to uTorrent and stop the seeding if we need too
-    if fileAction == "move" or fileAction == "link":
-        uTorrentHost = "http://" + config.get("uTorrent", "host") + ":" + config.get("uTorrent", "port") + "/gui/"
-        try:
-            uTorrent = UTorrentClient(uTorrentHost, config.get("uTorrent", "user"), config.get("uTorrent", "password"))
-            if uTorrent:
-                logger.debug(loggerHeader + "Stoping torrent with hash: %s", inputHash)
-                uTorrent.stop(inputHash)
-        except Exception, e:
-            logger.error(loggerHeader + "Failed to connect with uTorrent: %s", uTorrentHost)
-            logger.exception(e)
-        time.sleep(2)
-    else:
-        uTorrent = False
+    try: # Create an connection to the uTorrent Web UI
+        uTorrent = UTorrentClient(uTorrentHost, config.get("uTorrent", "user"), config.get("uTorrent", "password"))
+    except Exception, e:
+        logger.error(loggerHeader + "Failed to connect to uTorrent: %s", uTorrentHost)
+        logger.exception(e)
 
-    # If we received a "single" file torrent from uTorrent, then we dont need to search the directory for files as we can join directory + filename 
-    if inputFileName and inputFileName.lower().endswith(mediaExt) and not any(word in inputFileName.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
-        if os.path.isfile(inputDirectory):
-            processFile(fileAction, inputDirectory, outputDestination)
-        else:
-            processFile(fileAction, os.path.join(inputDirectory, inputFileName), outputDestination)
-    else:
-        for dirpath, dirnames, filenames in os.walk(inputDirectory):
-            for filename in filenames:
-                inputFile = os.path.join(dirpath, filename)
-                outputFile = os.path.join(outputDestination, filename)
-                if filename.lower().endswith(mediaExt) and not any(word in filename.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
-                    logger.debug(loggerHeader + "Found media file: %s", filename)
+    if uTorrent: # We poll uTorrent for a list of files matching the hash, and process them
+        if fileAction == "move" or fileAction == "link":
+            logger.debug(loggerHeader + "Stop seeding torrent with hash: %s", inputHash)
+            uTorrent.stop(inputHash)
+
+        status, data = uTorrent.getfiles(inputHash)
+        hash, files = data['files']
+        for file in files:
+            fileName, fileSize, downloadedSize = file[:3]
+            if fileSize == downloadedSize:
+                inputFile = os.path.join(inputDirectory, fileName)
+                outputFile = os.path.join(outputDestination, fileName)
+                if fileName.lower().endswith(mediaExt) and not any(word in fileName.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
+                    logger.debug(loggerHeader + "Found media file: %s", fileName)
                     processFile(fileAction, inputFile, outputFile)
-
-                elif filename.lower().endswith(archiveExt) and not any(word in filename.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
-                    logger.debug(loggerHeader + "Found compressed file: %s", filename)
+                    
+                elif fileName.lower().endswith(archiveExt) and not any(word in fileName.lower() for word in ignoreWords) and not any(word in inputDirectory.lower() for word in ignoreWords):
+                    logger.debug(loggerHeader + "Found compressed file: %s", fileName)
                     extractFile(inputFile, outputDestination)
+            else:
+                logger.error(loggerHeader + "Download hasnt completed for torrent: %s", inputName)
+                raise
+    else:
+        logger.error(loggerHeader + "No connection with uTorrent")
+        raise
 
-    # Optionally process the outputDestination by calling Couchpotato/Sickbeard
+    # Optionally process the outputDestination by calling Couchpotato
     if inputLabel == config.get("Couchpotato", "label") and config.getboolean("Couchpotato", "active"):
         try:
             logger.info(loggerHeader + "Calling Couchpotato to process directory: %s", outputDestination)
@@ -233,76 +212,70 @@ def main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLa
         except Exception, e:
             logger.error(loggerHeader + "Couchpotato post process failed for directory: %s", outputDestination)
             logger.exception(e)
-        time.sleep(2)
 
+    # Optionally process the outputDestination by calling Sickbeard
     elif inputLabel == config.get("Sickbeard", "label") and config.getboolean("Sickbeard", "active"):
         try:
             logger.info(loggerHeader + "Calling Sickbeard to process directory: %s", outputDestination)
-            processEpisode(outputDestination, inputName)
+            processEpisode(outputDestination)
         except Exception, e:
             logger.error(loggerHeader + "Sickbeard post process failed for directory: %s", outputDestination)
             logger.exception(e)
-        time.sleep(2)
 
-    # Delete leftover files
-    if config.getboolean("uProcess", "deleteLeftover"):
-        try:
-            logger.debug(loggerHeader + "Deleting directory and content: %s", outputDestination)
-            shutil.rmtree(outputDestination)
-        except Exception, e:
-            logger.error(loggerHeader + "Failed to delete directory: %s", outputDestination)
-            logger.exception(e)
-
-    # Resume seeding in uTorrent
-    if uTorrent:
-        if fileAction == "move":
-            logger.debug(loggerHeader + "Removing torrent with hash: %s", inputHash)
-            uTorrent.removedata(inputHash)
-        elif fileAction == "link":
-            logger.debug(loggerHeader + "Starting torrent with hash: %s", inputHash)
-            uTorrent.start(inputHash)
-        time.sleep(2)
+    # Resume seeding in uTorrent if needed
+    if uTorrent and fileAction == "move" or fileAction == "link":
+        logger.debug(loggerHeader + "Start seeding torrent with hash: %s", inputHash)
+        uTorrent.start(inputHash)
 
     logger.info(loggerHeader + "Success, all done!\n")
 
 if __name__ == "__main__":
 
-    logfile = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "uProcess.log"))
-    loggerHeader = "uProcess :: "
-    loggerFormat = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%b-%d %H:%M:%S')
-    logger = logging.getLogger('uProcess')
-    if config.getboolean("uProcess", "debug"):
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.setLevel(logging.INFO)
-
     config = ConfigParser.ConfigParser()
     configFilename = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "config.cfg"))
     config.read(configFilename)
 
+    logfile = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), "uProcess.log"))
+    loggerHeader = "uProcess :: "
+    loggerFormat = logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%b-%d %H:%M:%S')
+    logger = logging.getLogger('uProcess')
+
+    loggerStd = logging.StreamHandler()
+    loggerStd.setFormatter(loggerFormat)
+
+    loggerHdlr = logging.FileHandler(logfile)
+    loggerHdlr.setFormatter(loggerFormat)
+    loggerHdlr.setLevel(logging.INFO)
+
+    if config.getboolean("uProcess", "debug"):
+        logger.setLevel(logging.DEBUG)
+        loggerHdlr.setLevel(logging.DEBUG)
+        loggerStd.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
+        loggerHdlr.setLevel(logging.INFO)
+        loggerStd.setLevel(logging.INFO)
+
+    logger.addHandler(loggerStd)
+    logger.addHandler(loggerHdlr)
+
     if not os.path.isfile(configFilename):
         logger.error(loggerHeader + "Config file not found: " + configFilename)
-        sys.exit(1)
+        raise
     else:
         logger.info(loggerHeader + "Config loaded: " + configFilename)
 
-    # usage: uProcess.py "%D" "%N" "%I" "%K" "%F" "%L"
-    # uTorrent 3.0+ only
+    # usage: uProcess.py "%D" "%N" "%I" "%L"
     inputDirectory = os.path.normpath(sys.argv[1])  # %D - Where the files are located
     inputName = sys.argv[2]                         # %N - The name of the torrent (as seen in uTorrent)
     inputHash = sys.argv[3]                         # %I - The hash of the torrent
-    inputKind = sys.argv[4]                         # %K - The torrent kind (single/multi)
-    if inputKind == "single":
-        inputFileName = sys.argv[5]                 # %F
-    else:
-        inputFileName = False
-    if sys.argv[6]:
-        inputLabel = sys.argv[6]                    # %L - The label of the torrent
+    if sys.argv[4]:
+        inputLabel = sys.argv[4]                    # %L - The label of the torrent
     else:
         inputLabel = False
 
     try:
-        main(inputDirectory, inputName, inputHash, inputKind, inputFileName, inputLabel)
+        main(inputDirectory, inputName, inputHash, inputLabel)
     except Exception, e:
         logger.error(loggerHeader + "One or more variables are missing")
         logger.exception(e)
