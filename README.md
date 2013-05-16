@@ -11,9 +11,9 @@ Features:
 
 Requirements:
 ---------
-uTorrent 1.8+, abit unsure on which exact version. But aslong as uTorrent can pass "%D" "%N" "%I" "%L" to uProcess it should work
-7-zip
-Python 2.7+
+- uTorrent 1.8+, abit unsure on which exact version. But aslong as uTorrent can pass "%D" "%N" "%I" "%L" to uProcess it should work
+- 7-zip
+- Python 2.7+
 
 Usage:
 ---------
